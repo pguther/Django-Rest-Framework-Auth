@@ -9,14 +9,29 @@ import logging
 
 
 class UserSerializer(serializers.ModelSerializer):
-    userdescription = serializers.CharField(source='profile.userdescription', allow_blank=True)
+    """
+    The serializer for users. Allows account creation, updating, and deletion
+    """
+    account_activated = serializers.BooleanField(source='profile.account_activated', required=False)
+    activation_key = serializers.CharField(source='profile.activation_key', required=False)
+    key_expires = serializers.DateTimeField(source='profile.key_expires', required=False)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'email', 'userdescription',)
+        fields = ('id', 'username', 'password', 'email', 'account_activated', 'activation_key',
+                  'key_expires',)
+        # write_only_fields = ('password', 'activation_key', 'key_expires',)
         write_only_fields = ('password',)
+        read_only_fields = ('account_activated',)
 
     def create(self, validated_data):
+        """
+        Creates a new user.  Pops off values for user profile, creates the user and userprofile, and associates the two
+        Password is added separately to ensure it is correctly hashed
+        :param validated_data:
+        :return: a newly created user object
+        """
+
         profile_data = validated_data.pop('profile', None)
 
         user = User.objects.create(
@@ -37,65 +52,3 @@ class UserSerializer(serializers.ModelSerializer):
         profile, created = Profile.objects.get_or_create(user=user, defaults=profile_data)
         if not created and profile_data is not None:
             super(UserSerializer, self).update(profile, profile_data)
-
-class USerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = User
-        fields = ('id', 'username',)
-
-
-
-
-
-'''
-class UserProfileSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username')
-    email = serializers.CharField(source='user.email')
-    password = serializers.CharField(source='user.password')
-    userdescription = serializers.Field(source='userdescription')
-
-    class Meta:
-        model = UserProfile
-        fields = ('id', 'username', 'email', 'password', 'userdescription',)
-
-    def restore_object(self, validated_data, instance=None):
-        """
-        Given a dictionary of deserialized field values, either update
-        an existing model instance, or create a new model instance.
-        """
-        if instance is not None:
-            instance.user.email = validated_data.get('user.email', instance.user.email)
-            instance.userdescription = validated_data.get('userdescription', instance.userdescription)
-            instance.user.password = validated_data.get('user.password', instance.user.password)
-            return instance
-
-        user = User.objects.create_user(username=validated_data.get('user.username'), email= validated_data.get('user.email'), password=validated_data.get('user.password'))
-        return UserProfile(user=user)
-
-
-
-
-
-class UserSerializer(serializers.ModelSerializer):
-    chores = serializers.PrimaryKeyRelatedField(many=True, queryset=Chore.objects.all, required=False)
-    id = serializers.IntegerField(source = 'pk', read_only = True)
-    username = serializers.CharField(source = 'user.username', read_only = True)
-    email = serializers.CharField(source = 'user.email')
-    password = serializers.CharField(source= 'user.password')
-
-    class Meta:
-        model=UserProfile
-        fields = ('id', 'password', 'username', 'email', 'activation_key', 'key_expires', 'chores')
-        write_only_fields = ['password',]
-
-    def create(self, validated_data):
-        user = User(email=validated_data['email'], username=validated_data['username'])
-        user.set_password(validated_data['password'])
-        user.save()
-
-        newprofile = UserProfile(user=user, activation_key = validated_data['activation_key'],
-                                 key_expires = validated_data['key_expires'])
-        newprofile.save()
-        return newprofile
-'''
