@@ -15,7 +15,8 @@ class UserSerializer(serializers.ModelSerializer):
     account_activated = serializers.BooleanField(source='profile.account_activated', required=False, read_only=True)
     activation_key = serializers.CharField(source='profile.activation_key', required=False, write_only=True)
     key_expires = serializers.DateTimeField(source='profile.key_expires', required=False, write_only=True)
-
+    password = serializers.CharField(source='user.password', write_only=True)
+	
     class Meta:
         model = User
         fields = ('id', 'username', 'password', 'email', 'account_activated', 'activation_key', 'key_expires',)
