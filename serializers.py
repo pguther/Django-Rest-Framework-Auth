@@ -12,16 +12,14 @@ class UserSerializer(serializers.ModelSerializer):
     """
     The serializer for users. Allows account creation, updating, and deletion
     """
-    account_activated = serializers.BooleanField(source='profile.account_activated', required=False)
-    activation_key = serializers.CharField(source='profile.activation_key', required=False)
-    key_expires = serializers.DateTimeField(source='profile.key_expires', required=False)
+    account_activated = serializers.BooleanField(source='profile.account_activated', required=False, read_only=True)
+    activation_key = serializers.CharField(source='profile.activation_key', required=False, write_only=True)
+    key_expires = serializers.DateTimeField(source='profile.key_expires', required=False, write_only=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'email', 'account_activated', 'activation_key',
-                  'key_expires',)
-        # write_only_fields = ('password', 'activation_key', 'key_expires',)
-        write_only_fields = ('password',)
+        fields = ('id', 'username', 'password', 'email', 'account_activated', 'activation_key', 'key_expires',)
+        write_only_fields = ('password', 'activation_key', 'key_expires',)
         read_only_fields = ('account_activated',)
 
     def create(self, validated_data):
