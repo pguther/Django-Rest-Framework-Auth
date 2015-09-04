@@ -69,7 +69,7 @@ class ActivateUser(APIView):
         """
         try:
             return Profile.objects.get(activation_key=activation_key)
-        except Chore.DoesNotExist:
+        except Profile.DoesNotExist:
             raise Http404
 
     def get(self, request, activation_key, format=None):
@@ -99,6 +99,7 @@ class ActivateUser(APIView):
         profile.account_activated = True
         profile.save()
         return Response("Thank you, your account is now active")
+
 
 class UserDetail(APIView):
     """
@@ -132,6 +133,7 @@ class UserDetail(APIView):
         :param format:
         :return:
         """
+        return Response("STUB")
 
 class UserList(APIView):
 
