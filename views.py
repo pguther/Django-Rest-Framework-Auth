@@ -12,10 +12,31 @@ from rest_auth.models import Profile
 from rest_auth.permissions import IsAccountActivated
 from api.permissions import IsOwnerOrReadOnly
 from django.contrib.auth.models import User
-import hashlib, datetime, random, uuid
+import datetime, uuid, json, logging, pytz
 from django.utils import timezone
-import logging
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.authtoken.models import Token
 # Create your views here.
+
+
+class ObtainExpiringAuthToken(ObtainAuthToken):
+    """
+    Endpoint to obtain an authentication token
+    """
+    def post(self, request):
+        """
+        Returns an authentication token for the username and password pair or bad request
+        :param request: username, password
+        :return: Authentication token or 400 Bad Request
+        """
+        serializer = self.serializer_class(data=request.DATA)
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            token, created = Token.objects.get_or_create(user=user)
+
+            return Response({'token': token.key})
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class Register(APIView):
