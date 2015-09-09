@@ -14,3 +14,15 @@ class IsAccountActivated(permissions.BasePermission):
 
         return profile.account_activated is True
 
+
+class IsAuthenticatedOrPostOnly(permissions.BasePermission):
+    """
+    The request is authenticated as a user, or is a POST only request
+    """
+
+    def has_permission(self, request, view):
+        return (
+            request.method == 'POST' or
+            request.user and
+            request.user.is_authenticated()
+        )

@@ -4,8 +4,9 @@ from django.forms import widgets
 from rest_framework import serializers
 from api.models import Chore
 from rest_auth.models import Profile
+from rest_auth.utils import send_activation_email
 from django.contrib.auth.models import User
-import logging
+import logging, uuid, datetime
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -30,7 +31,7 @@ class UserSerializer(serializers.ModelSerializer):
         :return: a newly created user object
         """
 
-        profile_data = validated_data.pop('profile', None)
+        profile_data = self.validated_data.pop('profile', None)
 
         user = User.objects.create(
             username=validated_data['username'],
@@ -39,9 +40,11 @@ class UserSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
         self.create_or_update_profile(user, profile_data)
+        send_activation_email(user)
         return user
 
     def update(self, instance, validated_data):
+
         profile_data = validated_data.pop('profile', None)
         self.create_or_update_profile(instance, profile_data)
         return super(UserSerializer, self).update(instance, validated_data)

@@ -1,28 +1,34 @@
-from django.shortcuts import render
+# standard django imports
 from django.core.mail import send_mail
 from django.http import Http404
+from django.utils import timezone
+from django.contrib.auth.models import User
+
+# django rest framework imports
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
-from rest_framework import mixins
-from rest_framework import generics
-from api.models import Chore
-from rest_auth.serializers import UserSerializer
-from rest_auth.models import Profile
-from rest_auth.permissions import IsAccountActivated
-from api.permissions import IsOwnerOrReadOnly
-from django.contrib.auth.models import User
-import datetime, uuid, json, logging, pytz
-from django.utils import timezone
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
+
+# rest_auth imports
+from rest_auth.serializers import UserSerializer
+from rest_auth.models import Profile
+from rest_auth.permissions import IsAccountActivated, IsAuthenticatedOrPostOnly
+from rest_auth.utils import send_activation_email
+
+# other imports
+import datetime, uuid
 # Create your views here.
 
 
-class ObtainExpiringAuthToken(ObtainAuthToken):
+class AuthToken(ObtainAuthToken):
     """
-    Endpoint to obtain an authentication token
+    Endpoint for authentication token actions
     """
+
+    permission_classes = (IsAuthenticatedOrPostOnly,)
+
     def post(self, request):
         """
         Returns an authentication token for the username and password pair or bad request
@@ -30,13 +36,25 @@ class ObtainExpiringAuthToken(ObtainAuthToken):
         :return: Authentication token or 400 Bad Request
         """
         serializer = self.serializer_class(data=request.DATA)
+
         if serializer.is_valid():
             user = serializer.validated_data['user']
             token, created = Token.objects.get_or_create(user=user)
-
             return Response({'token': token.key})
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request):
+        """
+        Effectively logs all clients out of the account by replacing the authentication token for the user with
+        a new one
+        """
+        try:
+            request.user.auth_token.delete()
+        except:
+            pass
+
+        return Response("Successfully logged out of all accounts")
 
 
 class Register(APIView):
@@ -51,27 +69,17 @@ class Register(APIView):
         :param format:
         :return: Account created message or error 400 - bad request
         """
+        data = dict(request.data)
 
-        data = request.data
-        username = data['username']
-        email = data['email']
         activation_key = uuid.uuid4()
         key_expires = datetime.datetime.today() + datetime.timedelta(2)
 
         # Add activation key and key expiry date to data dictionary
         data.update({'activation_key':activation_key, 'key_expires':key_expires})
-
-        serializer = UserSerializer(data=data)
+        serializer = UserSerializer(data=request.data)
 
         if serializer.is_valid():
-
             serializer.save()
-
-            email_subject = 'HouseMate Account Activation'
-            email_body = 'Hey %s, thanks for signing up. To activate your account, click this link within \
-            48hours http://127.0.0.1:8000/register/activate/%s' % (username, activation_key)
-            send_mail(email_subject, email_body, 'registration@housemate.com', (email,), fail_silently=False)
-
             return Response("Your account has been created. Please check your email for an activation link")
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -106,15 +114,10 @@ class ActivateUser(APIView):
         username = profile.user.username
 
         if profile.key_expires < timezone.now():
-            activation_key = uuid.uuid4()
-            key_expires = datetime.datetime.today() + datetime.timedelta(2)
-            profile.activation_key = activation_key
-            profile.key_expires = key_expires
+            profile.activation_key = uuid.uuid4()
+            profile.key_expires = datetime.datetime.today() + datetime.timedelta(2)
             profile.save()
-            email_subject = 'HouseMate Account Activation'
-            email_body = 'Hey %s, thanks for signing up. To activate your account, click this link within ' \
-                         '48hours http://127.0.0.1:8000/register/activate/%s' % (username, activation_key)
-            send_mail(email_subject, email_body, 'registration@housemate.com', (email,), fail_silently=False)
+            send_activation_email(profile.user)
             return Response("key expired, a new activation key has been emailed to you")
 
         profile.account_activated = True
@@ -145,6 +148,21 @@ class UserDetail(APIView):
         :param format:
         :return:
         """
+        user = request.user
+        data = dict(request.data)
+
+        if user.email != data['email']:
+            activation_key = uuid.uuid4()
+            key_expires = datetime.datetime.today() + datetime.timedelta(2)
+
+            # Add activation key and key expiry date to data dictionary
+            data.update({'activation_key':activation_key, 'key_expires':key_expires})
+
+        serializer = UserSerializer(user, data=data)
+
+        if serializer.is_valid():
+            serializer.save()
+
         return Response("STUB")
 
     def delete(self, request, format=None):
