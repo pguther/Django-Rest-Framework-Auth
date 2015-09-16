@@ -12,7 +12,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 
 # rest_auth imports
-from rest_auth.serializers import UserSerializer
+from rest_auth.serializers import UserSerializer, CreateUserSerializer
 from rest_auth.models import Profile
 from rest_auth.permissions import IsAccountActivated, IsAuthenticatedOrPostOnly
 from rest_auth.utils import send_activation_email
@@ -65,18 +65,11 @@ class Register(APIView):
     def post(self, request, format=None):
         """
         Creates a new unactivated user and user profile, and sends and email with activation link
-        :param request: username, email, password
+        :param request: username, email, password, first_name, last_name
         :param format:
         :return: Account created message or error 400 - bad request
         """
-        data = dict(request.data)
-
-        activation_key = uuid.uuid4()
-        key_expires = datetime.datetime.today() + datetime.timedelta(2)
-
-        # Add activation key and key expiry date to data dictionary
-        data.update({'activation_key':activation_key, 'key_expires':key_expires})
-        serializer = UserSerializer(data=request.data)
+        serializer = CreateUserSerializer(data=request.data)
 
         if serializer.is_valid():
             serializer.save()
@@ -129,7 +122,7 @@ class UserDetail(APIView):
     """
     Endpoints to get/update user information, or delete account
     """
-    permission_classes = (permissions.IsAuthenticated, IsAccountActivated)
+    permission_classes = (permissions.IsAuthenticated, )
 
     def get(self, request, format=None):
         """
@@ -149,21 +142,13 @@ class UserDetail(APIView):
         :return:
         """
         user = request.user
-        data = dict(request.data)
 
-        if user.email != data['email']:
-            activation_key = uuid.uuid4()
-            key_expires = datetime.datetime.today() + datetime.timedelta(2)
-
-            # Add activation key and key expiry date to data dictionary
-            data.update({'activation_key':activation_key, 'key_expires':key_expires})
-
-        serializer = UserSerializer(user, data=data)
+        serializer = UserSerializer(user, data=request.data)
 
         if serializer.is_valid():
             serializer.save()
 
-        return Response("STUB")
+        return Response(serializer.data)
 
     def delete(self, request, format=None):
         """
