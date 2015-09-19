@@ -1,8 +1,10 @@
 # standard django imports
-from django.core.mail import send_mail
 from django.http import Http404
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.contrib import messages
+from django.views.generic import FormView, TemplateView
+from django.core.urlresolvers import reverse_lazy
 
 # django rest framework imports
 from rest_framework.views import APIView
@@ -11,15 +13,16 @@ from rest_framework import status, permissions
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 
-# rest_auth imports
-from rest_auth.serializers import UserSerializer, CreateUserSerializer
-from rest_auth.models import Profile
-from rest_auth.permissions import IsAccountActivated, IsAuthenticatedOrPostOnly
-from rest_auth.utils import send_activation_email
+# rest_accounts imports
+from rest_accounts.serializers import UserSerializer, CreateUserSerializer, ChangePasswordSerializer, \
+    ResetPasswordSerializer
+from rest_accounts.models import Profile
+from rest_accounts.permissions import IsAuthenticatedOrPostOnly
+from rest_accounts.utils import send_activation_email
+from rest_accounts.forms import SetPasswordForm
 
 # other imports
 import datetime, uuid
-# Create your views here.
 
 
 class AuthToken(ObtainAuthToken):
@@ -106,12 +109,13 @@ class ActivateUser(APIView):
         email = profile.user.email
         username = profile.user.username
 
-        if profile.key_expires < timezone.now():
+        if profile.activation_key_expires < timezone.now():
             profile.activation_key = uuid.uuid4()
-            profile.key_expires = datetime.datetime.today() + datetime.timedelta(2)
+            profile.activation_key_expires = datetime.datetime.today() + datetime.timedelta(2)
             profile.save()
             send_activation_email(profile.user)
-            return Response("key expired, a new activation key has been emailed to you")
+            return Response("key expired, a new activation key has been emailed to you",
+                            status=status.HTTP_412_PRECONDITION_FAILED)
 
         profile.account_activated = True
         profile.save()
@@ -129,17 +133,19 @@ class UserDetail(APIView):
         Endpoint to get information about the logged in user
         :param request:
         :param format:
-        :return:
+        :return: Json representation of the account information
         """
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
     def put(self, request, format=None):
         """
-        STUB
-        :param request:
+        Endpoint to update user information other than password and username.  If email is updated, account will
+        be marked as unactivated and an activation email will be sent to the new email.  Unactivated accounts can only
+        access and change their own account information.
+        :param request: first_name, last_name, email,
         :param format:
-        :return:
+        :return: Json representation of the updated account information
         """
         user = request.user
 
@@ -147,8 +153,8 @@ class UserDetail(APIView):
 
         if serializer.is_valid():
             serializer.save()
-
-        return Response(serializer.data)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, format=None):
         """
@@ -158,6 +164,23 @@ class UserDetail(APIView):
         :return:
         """
         return Response("STUB")
+
+
+class ChangePassword(APIView):
+    """
+    Endpoint to change the authenticated user's password
+    Auth token WILL be deleted upon a successful password change so a new one needs to be requested
+    """
+    permission_classes = (permissions.IsAuthenticated, )
+
+    def put(self, request, format=None):
+        serializer = ChangePasswordSerializer(request.user, data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response("Password succesfully changed")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 class UserList(APIView):
 
@@ -169,3 +192,75 @@ class UserList(APIView):
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
 
+
+class ResetPassword(APIView):
+
+    def post(self, request, format=None):
+        """
+        Sends a password reset email to a user email address given a valid username or email
+        :param request: username_or_email
+        :param format:
+        :return:
+        """
+
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.save()
+            return Response("Password recovery email has been sent to %s" % (email))
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResetPasswordConfirm(FormView):
+    template_name = "reset_password_template.html"
+    form_class = SetPasswordForm
+
+    def get_success_url(self):
+        return reverse_lazy('reset_password_success')
+
+    def get_profile(self, password_recovery_key):
+        """
+        Gets a user profile based on its password_recovery_key
+        :param password_recovery_key: the password recovery key emailed to the user
+        :return: user profile object or 404
+        """
+        try:
+            return Profile.objects.get(password_recovery_key=password_recovery_key)
+        except Profile.DoesNotExist:
+            raise Http404
+
+    def post(self, request, password_recovery_key=None, *arg, **kwargs):
+        """
+        View that checks the hash in a password reset link and presents a
+        form for entering a new password.  If successful, auth tokens will be deleted so all instances
+        will need to log in again
+        """
+        form = self.form_class(request.POST)
+        assert password_recovery_key is not None  # checked by URLconf
+
+        profile = self.get_profile(password_recovery_key)
+
+        user = profile.user
+
+        if profile.activation_key_expires >= timezone.now():
+
+            if form.is_valid():
+                new_password= form.cleaned_data['new_password2']
+                user.set_password(new_password)
+                try:
+                    user.auth_token.delete()
+                except:
+                    pass
+                user.save()
+
+                messages.success(request, 'Password has been reset.')
+                return self.form_valid(form)
+            else:
+                messages.error(request, 'Password reset was unsuccessful.')
+                return self.form_invalid(form)
+        else:
+            messages.error(request, 'Password recovery key has expired.')
+            return self.form_invalid(form)
+
+class ResetPasswordSuccess(TemplateView):
+    template_name = "password_reset_success.html"

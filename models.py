@@ -1,7 +1,9 @@
+# standard Django imports
 from django.db import models
 from django.contrib.auth.models import User
+
+# other python imports
 import datetime
-# Create your models here.
 
 
 class Profile(models.Model):
@@ -11,8 +13,10 @@ class Profile(models.Model):
     """
     user = models.OneToOneField(User, unique=True)
     activation_key= models.CharField(max_length=80)
-    key_expires = models.DateTimeField(default=datetime.datetime.today())
+    activation_key_expires = models.DateTimeField(default=datetime.datetime.today())
     account_activated = models.BooleanField(default=False)
+    password_recovery_key = models.CharField(max_length=80, blank=True, null=True)
+    password_recovery_key_expires = models.DateTimeField(default=datetime.datetime.today())
 
     def __str__(self):
         return self.user.username
