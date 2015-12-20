@@ -7,28 +7,28 @@ both understand account creation/modificaion in django and to modify/add a coupl
 
 ## Endpoints
 
-### /token/ (POST/DELETE)
+#### /token/ (POST/DELETE)
 * username
 * password
 
-### /register/ (POST)
+#### /register/ (POST)
 * Username
 * Password
 * email
 * first_name (optional)
 * last_name (optional)
 
-### /activate/activation_token/ (GET)
+#### /activate/activation_token/ (GET)
 
-### /user/ (requires authentication via token or username/password)
+#### /user/ (requires authentication via token or username/password)
 * GET - retreives information about authenticated user
 * PUT - allows user information other than username or password to be updated
 
-### /password/change/ (PUT) (requires authentication via token or username/password)
+#### /password/change/ (PUT) (requires authentication via token or username/password)
 * old_password
 * new_password
 
-### /password/reset (POST)
+#### /password/reset (POST)
 * username OR email
 
-### /password/reset/confirm/recovery_token/ (GET)
+#### /password/reset/confirm/recovery_token/ (GET)
